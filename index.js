@@ -216,4 +216,5 @@ client.on("interactionCreate", async (i) => {
     content: gerarTabela(venda)
   });
 });
-client.login("SEU_TOKEN_AQUI");
+
+client.login(process.env.TOKEN);
