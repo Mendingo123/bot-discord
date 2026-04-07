@@ -4,7 +4,10 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 
 const client = new Client({
@@ -13,10 +16,6 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
-});
-
-client.once("ready", () => {
-  console.log(`✅ Bot ligado como ${client.user.tag}`);
 });
 
 // 📊 armas
@@ -35,13 +34,18 @@ const armasBase = [
 
 const vendas = {};
 
+// 🧠 TABELA
 
-// 🧠 tabela painel (continua igual)
 function gerarTabela(venda) {
   let texto = `🔫 **ARMAS VENDIDAS**\n`;
   texto += venda.parceria ? "🟢 COM PARCERIA\n\n" : "🔴 SEM PARCERIA\n\n";
 
-  texto += "```Arma           Qtd        Valor\n";
+  const colArma = 18;
+  const colQtd = 8;
+  const colValor = 5;
+
+  texto += "```";
+  texto += `${"Arma".padEnd(colArma)}${"Qtd".padEnd(colQtd)}${"Valor".padStart(colValor)}\n`;
 
   let total = 0;
 
@@ -50,19 +54,27 @@ function gerarTabela(venda) {
     const valor = preco * a.qtd;
     total += valor;
 
-    texto += `${a.nome.padEnd(16)} [${a.qtd}]     ${valor.toLocaleString("pt-BR")}\n`;
+    const nome = a.nome.padEnd(colArma);
+    const qtd = `[${a.qtd}]`.padEnd(colQtd);
+    const val = `R$ ${valor.toLocaleString("pt-BR")}`.padEnd(colValor);
+
+    texto += `${nome}${qtd}${val}\n`;
   });
 
   texto += "```";
-  texto += `\n💰 TOTAL: ${total.toLocaleString("pt-BR")}`;
+  texto += `\n💰 TOTAL: R$ ${total.toLocaleString("pt-BR")}`;
 
   return texto;
 }
+// 🧠 TABELA FINAL
 
-
-// 🧠 NOVA TABELA BONITA (SÓ PRA FINALIZAR)
 function gerarTabelaFinal(venda) {
-  let texto = "Arma            Qtd     Valor\n";
+  const colArma = 18;
+  const colQtd = 8;
+  const colValor = 5;
+
+  let texto = `${"Arma".padEnd(colArma)}${"Qtd".padEnd(colQtd)}${"Valor".padStart(colValor)}\n`;
+
   let total = 0;
 
   venda.itens.forEach(a => {
@@ -71,28 +83,54 @@ function gerarTabelaFinal(venda) {
       const valor = preco * a.qtd;
       total += valor;
 
-      texto += `${a.nome.padEnd(16)} ${String(a.qtd).padEnd(7)} ${valor.toLocaleString("pt-BR")}\n`;
+      const nome = a.nome.padEnd(colArma);
+      const qtd = String(a.qtd).padEnd(colQtd);
+      const val = `R$ ${valor.toLocaleString("pt-BR")}`.padEnd(colValor);
+
+      texto += `${nome}${qtd}${val}\n`;
     }
   });
 
   return { texto, total };
 }
 
+// 🚀 painel botão
+client.once("ready", async () => {
+  console.log(`✅ Bot ligado como ${client.user.tag}`);
 
-// 🚀 comando
-client.on("messageCreate", async (message) => {
-  if (message.content === "!vendas") {
+  const canal = await client.channels.fetch("1482757026432942331");
 
-    vendas[message.author.id] = {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("abrir_painel")
+      .setLabel("📦 Abrir Painel")
+      .setStyle(ButtonStyle.Primary)
+  );
+
+//mexer nissso?????????????????
+
+  await canal.send({
+    content: "📊 **SISTEMA DE VENDAS**\nClique abaixo para abrir seu painel.",
+    components: [row]
+  });
+});
+
+// 🎯 interação
+client.on("interactionCreate", async (i) => {
+
+  // 🔥 abrir painel
+  if (i.customId === "abrir_painel") {
+
+    vendas[i.user.id] = {
       parceria: false,
       itens: armasBase.map(a => ({ ...a, qtd: 0 }))
     };
 
-    const venda = vendas[message.author.id];
+    const venda = vendas[i.user.id];
     const rows = [];
 
-    for (let i = 0; i < armasBase.length; i += 5) {
-      const slice = armasBase.slice(i, i + 5);
+    for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
+      const slice = armasBase.slice(i2, i2 + 5);
 
       rows.push(
         new ActionRowBuilder().addComponents(
@@ -106,8 +144,8 @@ client.on("messageCreate", async (message) => {
       );
     }
 
-    for (let i = 0; i < armasBase.length; i += 5) {
-      const slice = armasBase.slice(i, i + 5);
+    for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
+      const slice = armasBase.slice(i2, i2 + 5);
 
       rows.push(
         new ActionRowBuilder().addComponents(
@@ -123,22 +161,67 @@ client.on("messageCreate", async (message) => {
 
     rows.push(
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("parceria").setLabel("🔄 Parceria").setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("parceria_on")
+        .setLabel("🟢 COM")
+        .setStyle(venda.parceria ? ButtonStyle.Success : ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId("parceria_off")
+        .setLabel("🔴 SEM")
+        .setStyle(!venda.parceria ? ButtonStyle.Danger : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("reset").setLabel("🗑 Resetar").setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId("finalizar").setLabel("📦 Finalizar").setStyle(ButtonStyle.Primary)
       )
     );
 
-    message.reply({
+    return i.reply({
       content: gerarTabela(venda),
-      components: rows
+      components: rows,
+      ephemeral: true
     });
   }
-});
 
+  // 🔥 MODAL (abrir)
+  if (i.customId.startsWith("add_")) {
+    const id = i.customId.replace("add_", "");
 
-// 🎯 interação
-client.on("interactionCreate", async (i) => {
+    const modal = new ModalBuilder()
+      .setCustomId(`modal_${id}`)
+      .setTitle("Adicionar quantidade");
+
+    const input = new TextInputBuilder()
+      .setCustomId("qtd")
+      .setLabel("Digite a quantidade")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(input)
+    );
+
+    return i.showModal(modal);
+  }
+
+  // 🔥 MODAL (resposta)
+  if (i.isModalSubmit()) {
+
+    const id = i.customId.replace("modal_", "");
+    const qtd = parseInt(i.fields.getTextInputValue("qtd"));
+
+    if (isNaN(qtd) || qtd <= 0) {
+      return i.reply({ content: "❌ Quantidade inválida!", ephemeral: true });
+    }
+
+    const venda = vendas[i.user.id];
+    const item = venda.itens.find(a => a.id === id);
+
+    item.qtd += qtd;
+
+    return i.update({
+      content: gerarTabela(venda)
+    });
+  }
 
   if (!vendas[i.user.id]) {
     vendas[i.user.id] = {
@@ -149,26 +232,16 @@ client.on("interactionCreate", async (i) => {
 
   const venda = vendas[i.user.id];
 
-  if (i.customId.startsWith("add_")) {
-    const id = i.customId.replace("add_", "");
-    venda.itens.find(a => a.id === id).qtd++;
-  }
-
   if (i.customId.startsWith("rem_")) {
     const id = i.customId.replace("rem_", "");
     const item = venda.itens.find(a => a.id === id);
     if (item.qtd > 0) item.qtd--;
-  }
+  }	
 
-  if (i.customId === "parceria") {
-    venda.parceria = !venda.parceria;
-  }
+  if (i.customId === "parceria_on") venda.parceria = true;
+  if (i.customId === "parceria_off") venda.parceria = false;
+  if (i.customId === "reset") venda.itens.forEach(a => a.qtd = 0);
 
-  if (i.customId === "reset") {
-    venda.itens.forEach(a => a.qtd = 0);
-  }
-
-  // 🔥 FINALIZAR CORRIGIDO
   if (i.customId === "finalizar") {
 
     const { texto, total } = gerarTabelaFinal(venda);
@@ -184,20 +257,9 @@ client.on("interactionCreate", async (i) => {
       .setColor(venda.parceria ? 0x00ff88 : 0xff3c3c)
       .setDescription(venda.parceria ? "🟢 COM PARCERIA" : "🔴 SEM PARCERIA")
       .addFields(
-        {
-          name: "📄 Itens vendidos",
-          value: "```" + texto + "```"
-        },
-        {
-          name: "💰 Total",
-          value: `R$ ${total.toLocaleString("pt-BR")}`,
-          inline: true
-        },
-        {
-          name: "👤 Finalizado por",
-          value: `${i.user}`,
-          inline: true
-        }
+        { name: "📄 Itens vendidos", value: "```" + texto + "```" },
+        { name: "💰 Total", value: `R$ ${total.toLocaleString("pt-BR")}`, inline: true },
+        { name: "👤 Finalizado por", value: `${i.user}`, inline: true }
       )
       .setFooter({ text: "Cartel Sistema" })
       .setTimestamp();
@@ -209,12 +271,67 @@ client.on("interactionCreate", async (i) => {
       itens: armasBase.map(a => ({ ...a, qtd: 0 }))
     };
 
-    return i.reply({ content: "✅ Venda enviada!", ephemeral: true });
+    return i.update({
+      content: gerarTabela(vendas[i.user.id])
+    });
   }
 
-  return i.update({
-    content: gerarTabela(venda)
-  });
+const rows = [];
+
+// + botões
+for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
+  const slice = armasBase.slice(i2, i2 + 5);
+
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      slice.map(a =>
+        new ButtonBuilder()
+          .setCustomId(`add_${a.id}`)
+          .setLabel(`+ ${a.nome}`)
+          .setStyle(ButtonStyle.Secondary)
+      )
+    )
+  );
+}
+
+// - botões
+for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
+  const slice = armasBase.slice(i2, i2 + 5);
+
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      slice.map(a =>
+        new ButtonBuilder()
+          .setCustomId(`rem_${a.id}`)
+          .setLabel(`- ${a.nome}`)
+          .setStyle(ButtonStyle.Secondary)
+      )
+    )
+  );
+}
+
+// 🔥 parceria nova
+rows.push(
+  new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("parceria_on")
+      .setLabel("🟢 COM")
+      .setStyle(venda.parceria ? ButtonStyle.Success : ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("parceria_off")
+      .setLabel("🔴 SEM")
+      .setStyle(!venda.parceria ? ButtonStyle.Danger : ButtonStyle.Secondary),
+
+    new ButtonBuilder().setCustomId("reset").setLabel("🗑 Resetar").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("finalizar").setLabel("📦 Finalizar").setStyle(ButtonStyle.Primary)
+  )
+);
+
+return i.update({
+  content: gerarTabela(venda),
+  components: rows
+});
 });
 
 client.login(process.env.TOKEN);
