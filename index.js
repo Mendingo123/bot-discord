@@ -33,6 +33,8 @@ const armasBase = [
 ];
 
 const vendas = {};
+let contadorVendas = 1;
+const vendasLog = {};
 
 // 🧠 TABELA
 
@@ -66,6 +68,7 @@ function gerarTabela(venda) {
 
   return texto;
 }
+
 // 🧠 TABELA FINAL
 
 function gerarTabelaFinal(venda) {
@@ -94,6 +97,7 @@ function gerarTabelaFinal(venda) {
   return { texto, total };
 }
 
+
 // 🚀 painel botão
 client.once("ready", async () => {
   console.log(`✅ Bot ligado como ${client.user.tag}`);
@@ -106,13 +110,31 @@ client.once("ready", async () => {
       .setLabel("📦 Abrir Painel")
       .setStyle(ButtonStyle.Primary)
   );
+  
+// 🚀 painel
+const embed = new EmbedBuilder()
+  .setTitle("📊 SISTEMA DE VENDAS")
+  .setDescription(
+    "**Bem-vindo ao sistema de vendas do Cartel!**\n\n" +
+    "Aqui você poderá registrar suas vendas de forma rápida e organizada.\n\n" +
+    "• Clique no botão abaixo para abrir seu painel\n" +
+    "• Adicione os itens vendidos\n" +
+    "• Finalize e registre automaticamente\n\n" +
+    "💰 Controle total das suas vendas"
+  )
+  .setColor(0x2b2d31) // cor escura estilo discord
+  .setImage("https://cdn.discordapp.com/attachments/1482745869198692362/1490470354806640720/0405_1.gif") // 👈 sua imagem do cartel
+  .setFooter({ text: "Cartel Sistema" });
 
-//mexer nissso?????????????????
+const mensagem = await canal.send({
+  content: "<@&1490405460279300106>",
+  embeds: [embed],
+  components: [row]
+});
 
-  await canal.send({
-    content: "📊 **SISTEMA DE VENDAS**\nClique abaixo para abrir seu painel.",
-    components: [row]
-  });
+
+await mensagem.pin();
+  
 });
 
 // 🎯 interação
@@ -137,22 +159,8 @@ client.on("interactionCreate", async (i) => {
           slice.map(a =>
             new ButtonBuilder()
               .setCustomId(`add_${a.id}`)
-              .setLabel(`+ ${a.nome}`)
-              .setStyle(ButtonStyle.Secondary)
-          )
-        )
-      );
-    }
-
-    for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
-      const slice = armasBase.slice(i2, i2 + 5);
-
-      rows.push(
-        new ActionRowBuilder().addComponents(
-          slice.map(a =>
-            new ButtonBuilder()
-              .setCustomId(`rem_${a.id}`)
-              .setLabel(`- ${a.nome}`)
+              .setLabel(a.nome)
+              .setEmoji("➕")
               .setStyle(ButtonStyle.Secondary)
           )
         )
@@ -175,13 +183,14 @@ client.on("interactionCreate", async (i) => {
       )
     );
 
+
     return i.reply({
       content: gerarTabela(venda),
       components: rows,
       ephemeral: true
     });
   }
-
+  
   // 🔥 MODAL (abrir)
   if (i.customId.startsWith("add_")) {
     const id = i.customId.replace("add_", "");
@@ -190,11 +199,15 @@ client.on("interactionCreate", async (i) => {
       .setCustomId(`modal_${id}`)
       .setTitle("Adicionar quantidade");
 
-    const input = new TextInputBuilder()
-      .setCustomId("qtd")
-      .setLabel("Digite a quantidade")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
+const venda = vendas[i.user.id];
+const item = venda.itens.find(a => a.id === id);
+
+const input = new TextInputBuilder()
+  .setCustomId("qtd")
+  .setLabel("Digite a quantidade")
+  .setStyle(TextInputStyle.Short)
+  .setValue(String(item.qtd || "")) // 👈 AQUI O SEGREDO
+  .setRequired(true);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(input)
@@ -202,41 +215,46 @@ client.on("interactionCreate", async (i) => {
 
     return i.showModal(modal);
   }
+  
+// 🔥 MODAL (resposta)
 
-  // 🔥 MODAL (resposta)
   if (i.isModalSubmit()) {
-
     const id = i.customId.replace("modal_", "");
     const qtd = parseInt(i.fields.getTextInputValue("qtd"));
-
-    if (isNaN(qtd) || qtd <= 0) {
-      return i.reply({ content: "❌ Quantidade inválida!", ephemeral: true });
-    }
-
+    
+    if (isNaN(qtd)) {
+    return i.reply({ content: "❌ Quantidade inválida!", ephemeral: true });
+  }
+    
     const venda = vendas[i.user.id];
     const item = venda.itens.find(a => a.id === id);
-
-    item.qtd += qtd;
-
-    return i.update({
-      content: gerarTabela(venda)
-    });
+    
+  // ✅ lógica correta
+  if (qtd <= 0) {
+    item.qtd = 0;
+  } else {
+    item.qtd = qtd;
   }
 
+return i.update({
+  content: gerarTabela(venda),
+});
+  }
+  
   if (!vendas[i.user.id]) {
     vendas[i.user.id] = {
       parceria: false,
       itens: armasBase.map(a => ({ ...a, qtd: 0 }))
     };
   }
-
+  
   const venda = vendas[i.user.id];
 
   if (i.customId.startsWith("rem_")) {
     const id = i.customId.replace("rem_", "");
     const item = venda.itens.find(a => a.id === id);
     if (item.qtd > 0) item.qtd--;
-  }	
+  }
 
   if (i.customId === "parceria_on") venda.parceria = true;
   if (i.customId === "parceria_off") venda.parceria = false;
@@ -253,9 +271,10 @@ client.on("interactionCreate", async (i) => {
     const canal = await i.guild.channels.fetch("1482756821977403452");
 
     const embed = new EmbedBuilder()
-      .setTitle("📦 NOVA VENDA")
+      .setTitle(`📦 VENDA #${contadorVendas}`)
       .setColor(venda.parceria ? 0x00ff88 : 0xff3c3c)
       .setDescription(venda.parceria ? "🟢 COM PARCERIA" : "🔴 SEM PARCERIA")
+      .setThumbnail("https://cdn.discordapp.com/attachments/1482745869198692362/1490470354806640720/0405_1.gif")          
       .addFields(
         { name: "📄 Itens vendidos", value: "```" + texto + "```" },
         { name: "💰 Total", value: `R$ ${total.toLocaleString("pt-BR")}`, inline: true },
@@ -264,7 +283,17 @@ client.on("interactionCreate", async (i) => {
       .setFooter({ text: "Cartel Sistema" })
       .setTimestamp();
 
-    await canal.send({ embeds: [embed] });
+    const msg = await canal.send({
+      content: "📢 Nova venda registrada! <@&1482738310819352719>",
+      embeds: [embed]
+    });
+
+    vendasLog[contadorVendas] = {
+      msgId: msg.id,
+      vendedor: i.user.id
+    };
+
+    contadorVendas++;
 
     vendas[i.user.id] = {
       parceria: false,
@@ -272,43 +301,27 @@ client.on("interactionCreate", async (i) => {
     };
 
     return i.update({
-      content: gerarTabela(vendas[i.user.id])
+      content: gerarTabela(vendas[i.user.id])   // ✅ AQUI FOI A CORREÇÃO
     });
   }
 
-const rows = [];
+  // atualizar painel
+  const rows = [];
+  for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
+    const slice = armasBase.slice(i2, i2 + 5);
 
-// + botões
-for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
-  const slice = armasBase.slice(i2, i2 + 5);
-
-  rows.push(
-    new ActionRowBuilder().addComponents(
-      slice.map(a =>
-        new ButtonBuilder()
-          .setCustomId(`add_${a.id}`)
-          .setLabel(`+ ${a.nome}`)
-          .setStyle(ButtonStyle.Secondary)
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        slice.map(a =>
+          new ButtonBuilder()
+            .setCustomId(`add_${a.id}`)
+            .setLabel(a.nome)
+            .setEmoji("➕")
+            .setStyle(ButtonStyle.Secondary)
+        )
       )
-    )
-  );
-}
-
-// - botões
-for (let i2 = 0; i2 < armasBase.length; i2 += 5) {
-  const slice = armasBase.slice(i2, i2 + 5);
-
-  rows.push(
-    new ActionRowBuilder().addComponents(
-      slice.map(a =>
-        new ButtonBuilder()
-          .setCustomId(`rem_${a.id}`)
-          .setLabel(`- ${a.nome}`)
-          .setStyle(ButtonStyle.Secondary)
-      )
-    )
-  );
-}
+    );
+  }
 
 // 🔥 parceria nova
 rows.push(
@@ -330,8 +343,110 @@ rows.push(
 
 return i.update({
   content: gerarTabela(venda),
-  components: rows
 });
+});
+
+   //🔥 1. PAINEL (coloca no ready)
+   
+client.once("ready", async () => {
+
+  const canalControle = await client.channels.fetch("1490513274867945603");
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("apagar_venda_btn")
+      .setLabel("🗑 APAGAR")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await canalControle.send({
+    content: "📕 **CONTROLE DE VENDAS**\n\nAqui é onde você apaga vendas erradas, perdidas ou roubadas.\nClique no botão abaixo:",
+    components: [row]
+  });
+
+});
+
+client.on("interactionCreate", async (i) => {
+
+  // 🔥 botão
+  if (i.isButton() && i.customId === "apagar_venda_btn") {
+
+    const modal = new ModalBuilder()
+      .setCustomId("modal_apagar_venda")
+      .setTitle("Apagar Venda");
+
+    const numero = new TextInputBuilder()
+      .setCustomId("numero")
+      .setLabel("Número da venda")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const motivo = new TextInputBuilder()
+      .setCustomId("motivo")
+      .setLabel("Motivo")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(numero),
+      new ActionRowBuilder().addComponents(motivo)
+    );
+
+    return i.showModal(modal);
+  }
+
+  // 🔥 modal
+  if (i.isModalSubmit() && i.customId === "modal_apagar_venda") {
+
+    const numero = parseInt(i.fields.getTextInputValue("numero"));
+    const motivo = i.fields.getTextInputValue("motivo");
+
+    if (isNaN(numero)) {
+      return i.reply({ content: "❌ Número inválido!", ephemeral: true });
+    }
+
+    const dados = vendasLog[numero];
+
+    if (!dados) {
+      return i.reply({ content: "❌ Venda não encontrada!", ephemeral: true });
+    }
+
+    try {
+      const canalVendas = await i.guild.channels.fetch("1482756821977403452");
+      const mensagem = await canalVendas.messages.fetch(dados.msgId);
+
+      await mensagem.delete();
+      delete vendasLog[numero];
+
+      const canalLog = await i.guild.channels.fetch("1490555425496502412");
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🗑 VENDA APAGADA #${numero}`)
+        .setColor(0xff3c3c)
+        .setThumbnail("https://cdn.discordapp.com/attachments/1482745869198692362/1490470354806640720/0405_1.gif")
+        .addFields(
+          { name: "👤 Apagado por", value: `${i.user}`, inline: true },
+          { name: "📦 Vendedor", value: `<@${dados.vendedor}>`, inline: true },
+          { name: "📝 Motivo", value: motivo }
+        )
+        .setFooter({ text: "Sistema Cartel" })
+        .setTimestamp();
+
+      await canalLog.send({ embeds: [embed] });
+
+      return i.reply({
+        content: `✅ Venda #${numero} apagada com sucesso!`,
+        ephemeral: true
+      });
+
+    } catch {
+      return i.reply({
+        content: "❌ Erro ao apagar venda.",
+        ephemeral: true
+      });
+    }
+  }
+
 });
 
 client.login(process.env.TOKEN);
